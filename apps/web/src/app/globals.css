@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS Custom Properties ────────────────────────────────────────────────── */
+/* These mirror the Tailwind config so components can reference them in plain   */
+/* CSS where needed (e.g. SVG fill, inline styles, pseudo-elements).            */
+
+@layer base {
+  :root {
+    --color-paper:        #F7F4EE;
+    --color-paper-dark:   #EDE9DF;
+    --color-paper-darker: #E2DDD5;
+
+    --color-ink:          #1C1917;
+    --color-ink-muted:    #78716C;
+    --color-ink-faint:    #C4BDB3;
+
+    --color-marker-green:  #2DB87A;
+    --color-marker-blue:   #3B82F6;
+    --color-marker-red:    #DC4040;
+    --color-marker-yellow: #F5C228;
+    --color-marker-purple: #8B5CF6;
+    --color-marker-orange: #F07530;
+
+    --shadow-sketch-sm: 2px 2px 0px var(--color-ink);
+    --shadow-sketch:    3px 3px 0px var(--color-ink);
+    --shadow-sketch-md: 4px 4px 0px var(--color-ink);
+    --shadow-sketch-lg: 6px 6px 0px var(--color-ink);
+
+    --border-width: 2px;
+    --border-color: var(--color-ink);
+    --radius-card: 1.25rem;
+  }
+
+  /* ── Base resets ─────────────────────────────────────────────────────────── */
+  html {
+    font-family: var(--font-nunito), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Tabular numbers everywhere — critical for stats and scores */
+    font-variant-numeric: tabular-nums;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    /*
+     * Subtle dot grid — evokes graph-paper / notebook texture.
+     * Dots at 5% opacity: present on close look, invisible at a glance.
+     */
+    background-image: radial-gradient(
+      circle,
+      rgba(28, 25, 23, 0.055) 1px,
+      transparent 1px
+    );
+    background-size: 22px 22px;
+    color: var(--color-ink);
+    min-height: 100dvh;
+  }
+
+  /* ── Typography defaults ─────────────────────────────────────────────────── */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-syne), sans-serif;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--color-ink);
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    line-height: 1.6;
+  }
+
+  /* ── Focus styles — visible and on-brand ─────────────────────────────────── */
+  *:focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  /* ── Selection — yellow highlighter feel ─────────────────────────────────── */
+  ::selection {
+    background-color: var(--color-marker-yellow);
+    color: var(--color-ink);
+  }
+
+  /* ── Scrollbar — minimal, on-brand ───────────────────────────────────────── */
+  ::-webkit-scrollbar       { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--color-paper-dark); }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-faint);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-ink-muted); }
+}
+
+/* ─── Utility layer ────────────────────────────────────────────────────────── */
+@layer utilities {
+  /* The core sketch-box pattern: thick border + zero-blur offset shadow.
+     Use this as the default "card feel" whenever you need it outside components. */
+  .sketch-box {
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-sketch);
+  }
+
+  /* Stat number style: display font, heavy weight, tabular */
+  .num {
+    font-family: var(--font-syne), sans-serif;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+    letter-spacing: -0.03em;
+  }
+
+  /* Sticker label: small-caps style uppercase for badge text */
+  .label-text {
+    font-weight: 700;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* Press effect helper — applied on active for stamp feel */
+  .press-effect {
+    transition: transform 80ms ease, box-shadow 80ms ease;
+  }
+  .press-effect:active {
+    transform: translate(2px, 2px);
+    box-shadow: none !important;
+  }
+}
