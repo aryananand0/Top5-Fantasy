@@ -1,6 +1,6 @@
-# Top5 Fantasy — API (FastAPI)
+# Top5 Fantasy — API
 
-The backend REST API and background scheduler. Handles all business logic, database access, external API sync, and gameweek scoring.
+FastAPI backend for the Top5 Fantasy season-long fantasy soccer manager.
 
 ---
 
@@ -9,133 +9,173 @@ The backend REST API and background scheduler. Handles all business logic, datab
 | Tool | Purpose |
 |---|---|
 | FastAPI | REST API framework |
-| SQLAlchemy | ORM for PostgreSQL |
+| SQLAlchemy 2.x | ORM (sync, psycopg v3 driver) |
 | Alembic | Database migrations |
-| Pydantic v2 | Request/response validation |
-| APScheduler | Background jobs for data sync and scoring |
-| python-jose | JWT signing and verification |
-| passlib + bcrypt | Password hashing |
-| httpx | Async HTTP client for external API calls |
-| python-dotenv | Load `.env` in development |
-| uvicorn | ASGI server |
+| Pydantic v2 + pydantic-settings | Request/response validation, config |
+| psycopg v3 | PostgreSQL driver |
+| APScheduler | Background jobs *(added in Step 7)* |
+| python-jose | JWT *(added in Step 6)* |
+| passlib + bcrypt | Password hashing *(added in Step 6)* |
+| httpx | Async HTTP client for external APIs *(added in Step 7)* |
 
 ---
 
 ## Setup
 
 ```bash
-# From this directory (apps/api)
+# From apps/api/
 python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+source venv/bin/activate       # Windows: venv\Scripts\activate
+
+# Install production deps
 pip install -r requirements.txt
 
-# Copy environment variables
-cp ../../.env.example .env
-# Fill in DATABASE_URL, JWT_SECRET, FOOTBALL_DATA_API_KEY
+# Install dev/test deps
+pip install -r requirements-dev.txt
 
-# Run the server
+# Copy and fill in environment variables
+cp .env.example .env
+# Edit .env — at minimum set DATABASE_URL, SECRET_KEY
+
+# Run the server (development)
 uvicorn main:app --reload
-# Runs on http://localhost:8000
-# Interactive docs at http://localhost:8000/docs
+# API: http://localhost:8000
+# Interactive docs: http://localhost:8000/docs  (only in DEBUG=true mode)
 ```
 
 ---
 
-## Dependency Strategy
+## Environment Variables
 
-### Add now (in requirements.txt)
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes | `postgresql+psycopg://user:pass@host/db` |
+| `SECRET_KEY` | Yes | Random hex string, used for JWT signing |
+| `ENVIRONMENT` | No | `development` / `staging` / `production` |
+| `DEBUG` | No | Enables SQL echo and `/docs` endpoint |
+| `FRONTEND_URL` | No | Exact origin for CORS (default: `http://localhost:3000`) |
+| `FOOTBALL_DATA_API_KEY` | No | football-data.org API key (needed for Step 7+) |
+| `THESPORTSDB_API_KEY` | No | Optional image enrichment |
+| `REDIS_URL` | No | Not used in MVP; leave blank |
 
+Generate a secret key:
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
 ```
-fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg2-binary
-alembic
-pydantic[email]
-python-jose[cryptography]
-passlib[bcrypt]
-httpx
-apscheduler
-python-dotenv
-```
-
-### Add when the need arises
-
-| Package | When |
-|---|---|
-| `redis-py` | If caching is introduced (not in MVP) |
-| `celery` | If background jobs outgrow APScheduler (not in MVP) |
-| `sentry-sdk` | When error monitoring is needed pre-launch |
-| `pytest` + `httpx` | When writing API tests |
-| `slowapi` | If rate limiting on the API is needed |
-
-### Do not add
-
-- `celery` or `rq` — APScheduler is sufficient for MVP
-- `redis` — no caching layer in MVP
-- Any ORM beyond SQLAlchemy
-- `aiofiles` or async file I/O — not needed
-- Anything that requires a broker or message queue
 
 ---
 
-## Folder Structure (to be created when building begins)
+## Migrations
+
+Alembic manages the database schema. All migrations live in `alembic/versions/`.
+
+```bash
+# From apps/api/
+
+# Generate a new migration after changing models
+alembic revision --autogenerate -m "describe_the_change"
+
+# Apply all pending migrations
+alembic upgrade head
+
+# Roll back one migration
+alembic downgrade -1
+
+# Check current migration state
+alembic current
+```
+
+**Migration batches (Step 4 plan):**
+
+| Batch | Files | Tables |
+|---|---|---|
+| 1 | 001, 002, 003 | seasons, competitions, teams, players |
+| 2 | 004, 005 | gameweeks, fixtures |
+| 3 | 006, 007 | users, squads, squad_players |
+| 4 | 008, 009 | lineups, player_match_stats |
+| 5 | 010, 011 | transfers, user_gameweek_scores |
+| 6 | 012, 013 | mini_leagues, league_members, price_history |
+
+---
+
+## Project Structure
 
 ```
 apps/api/
-├── main.py              FastAPI app entry point, router registration
-├── config.py            Settings loaded from environment variables
-├── database.py          SQLAlchemy engine and session setup
-├── models/              SQLAlchemy ORM models (one file per domain)
-├── schemas/             Pydantic request and response schemas
-├── routers/             Route handlers (one file per domain)
-├── services/            Business logic (one file per domain)
-├── repositories/        Database query functions
-├── jobs/                Background scheduler jobs
-├── external/            Clients for football-data.org and TheSportsDB
-├── tests/               pytest test files
-├── alembic/             Database migration scripts
-├── requirements.txt     Pinned production dependencies
-└── .env                 Local environment variables (not committed)
+├── api/
+│   └── v1/
+│       ├── router.py          ← registers all v1 routes
+│       └── routes/
+│           └── health.py      ← /health and /info (no auth)
+├── core/
+│   ├── config.py              ← pydantic-settings Settings class
+│   └── dependencies.py        ← FastAPI Annotated deps (DBSession, AppSettings)
+├── db/
+│   └── session.py             ← engine, SessionLocal, get_db(), check_db_connection()
+├── models/                    ← SQLAlchemy ORM models (Step 4)
+│   ├── __init__.py
+│   └── *.py
+├── schemas/
+│   ├── common.py              ← MessageResponse, ErrorResponse
+│   └── *.py                   ← domain schemas added per step
+├── services/                  ← business logic modules (added per step)
+├── tests/
+│   ├── conftest.py            ← fixtures (mock_db, TestClient)
+│   └── test_health.py
+├── alembic/
+│   ├── env.py                 ← loads DB URL from settings, imports all models
+│   └── versions/              ← generated migration files
+├── alembic.ini
+├── main.py                    ← FastAPI app, CORS, lifespan, exception handlers
+├── requirements.txt
+├── requirements-dev.txt
+└── .env.example
 ```
 
 ---
 
-## Key Design Rules
+## Adding a New Route Module
 
-- Routes are thin: validate input, call a service, return a response.
-- Services contain business logic; they do not touch the database directly.
-- Repositories contain all database queries; they do not contain logic.
-- External API calls only happen inside `jobs/` — never inside a route.
-- Every route that requires authentication reads the user ID from the validated JWT, never from the request body.
+1. Create `api/v1/routes/example.py` with an `APIRouter`
+2. Add any request/response schemas to `schemas/example.py`
+3. Add business logic to `services/example.py`
+4. Register in `api/v1/router.py`:
+   ```python
+   from api.v1.routes import example
+   router.include_router(example.router, prefix="/example", tags=["example"])
+   ```
 
----
-
-## Background Jobs (overview)
-
-| Job | Schedule | Purpose |
-|---|---|---|
-| Fixture sync | Daily | Pull upcoming and completed fixtures |
-| Result sync | Every 3–6h on match days | Pull match results and player stats |
-| Score calculation | After result sync | Compute gameweek points for all users |
-| Badge enrichment | Weekly | Fetch club/player images from TheSportsDB |
-
-Jobs run inside the same process as the API using APScheduler. They can be extracted later if needed.
+**Design rules:**
+- Routes are thin: validate input, call a service, return a response
+- Services contain business logic; they do not query the DB directly
+- DB queries go in repository functions (added when needed — no empty repo files)
+- Auth is enforced via a FastAPI dependency on the route (added in Step 6)
+- Every protected route reads `user_id` from the JWT, never from the request body
 
 ---
 
-## API Design Rules
+## Running Tests
 
-- All endpoints return JSON.
-- Use standard HTTP status codes (200, 201, 400, 401, 403, 404, 422, 500).
-- Paginate all list endpoints — no unbounded responses.
-- Prefix all routes: `/api/v1/...`
-- Never expose internal database IDs in public-facing resources where a slug is appropriate.
+```bash
+# From apps/api/
+pytest
+
+# Verbose output
+pytest -v
+
+# A specific file
+pytest tests/test_health.py
+```
+
+Unit tests use a mocked DB and do not require a running PostgreSQL instance.
 
 ---
 
-## Mobile Compatibility
+## API Conventions
 
-The API is designed to be consumed by any HTTP client. A future React Native or Flutter mobile app will use the same endpoints with the same JWT auth (stored in secure device storage instead of an HTTP-only cookie).
-
-No backend changes are required to support a mobile app.
+- All routes are prefixed `/api/v1/`
+- Responses are JSON
+- HTTP status codes: 200, 201, 400, 401, 403, 404, 422, 500
+- List endpoints are paginated (no unbounded responses)
+- Internal database IDs are not exposed where a slug/code is appropriate
+- The API is designed to be consumable by any HTTP client (web or future mobile app)

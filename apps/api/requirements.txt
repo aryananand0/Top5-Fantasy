@@ -1,0 +1,16 @@
+# Production dependencies
+# Install with: pip install -r requirements.txt
+
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic-settings==2.6.1
+pydantic[email]==2.10.3       # enables EmailStr validation
+sqlalchemy==2.0.36
+alembic==1.14.0
+# psycopg v3 — use [binary] for compiled C extensions (faster, requires libpq)
+# use [c] if you need the pure-C extension without binary wheels
+psycopg[binary]==3.2.3
+
+# Auth
+python-jose[cryptography]==3.3.0   # JWT signing and verification
+passlib[bcrypt]==1.7.4             # password hashing
