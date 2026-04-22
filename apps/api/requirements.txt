@@ -14,3 +14,6 @@ psycopg[binary]==3.2.3
 # Auth
 python-jose[cryptography]==3.3.0   # JWT signing and verification
 passlib[bcrypt]==1.7.4             # password hashing
+
+# Ingestion
+httpx==0.27.2                      # HTTP client for football-data.org API
