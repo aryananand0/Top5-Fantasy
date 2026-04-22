@@ -7,11 +7,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base
+from .base import Base, TimestampMixin
 from .enums import GameweekStatus, ScoringMode
 
 
-class Gameweek(Base):
+class Gameweek(Base, TimestampMixin):
     """
     App-defined gameweeks — not tied to individual league matchdays.
     One GW covers a window of matches across all 5 competitions.

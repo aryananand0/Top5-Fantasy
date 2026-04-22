@@ -11,7 +11,7 @@ Plug in future routes by adding:
 
 from fastapi import APIRouter
 
-from api.v1.routes import auth, health
+from api.v1.routes import auth, gameweeks, health
 
 router = APIRouter()
 
@@ -20,6 +20,9 @@ router.include_router(health.router)
 
 # Auth
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
+
+# Gameweeks (Step 8)
+router.include_router(gameweeks.router, prefix="/gameweeks", tags=["gameweeks"])
 
 # --- Future routes (plug in as each step is implemented) ---
 
@@ -31,9 +34,6 @@ router.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 # from api.v1.routes import fixtures
 # router.include_router(fixtures.router, prefix="/fixtures", tags=["fixtures"])
-
-# from api.v1.routes import gameweeks
-# router.include_router(gameweeks.router, prefix="/gameweeks", tags=["gameweeks"])
 
 # from api.v1.routes import squads
 # router.include_router(squads.router, prefix="/squads", tags=["squads"])
