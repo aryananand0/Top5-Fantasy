@@ -154,6 +154,141 @@ apps/api/
 
 ---
 
+## Step 10 — Squad Builder Backend
+
+### How squad creation works
+
+Users build one 11-player squad per season from the cross-league player pool.
+The initial pick is free. After the season locks (first GW reaches LOCKED status),
+the squad can only be changed via the transfer system (Step 13).
+
+### Squad rules (MVP)
+
+| Rule | Value |
+|------|-------|
+| Squad size | 11 players |
+| Budget cap | £100.0 |
+| Formation | 1 GK · 3 DEF · 4 MID · 3 FWD (fixed) |
+| Max per club | 2 players |
+| Squads per user | 1 per season |
+| Bench | None in MVP |
+
+### How prices are used
+
+- Each player's `current_price` at the moment of squad creation is stored as `purchase_price` on `squad_players`.
+- `budget_remaining = £100.0 − sum(purchase_prices)`.
+- Re-syncing player prices does NOT retroactively change a user's `purchase_price` — that's locked at acquisition time.
+
+### Squad API routes
+
+All routes require authentication (`Authorization: Bearer <token>`).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/squad` | Get my current squad |
+| `POST` | `/api/v1/squad` | Create my squad (once per season) |
+| `PUT` | `/api/v1/squad` | Replace my squad (before season locks) |
+| `GET` | `/api/v1/players` | Browse available players |
+
+### Example API usage
+
+**Create a squad:**
+```http
+POST /api/v1/squad
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "player_ids": [101, 202, 303, 404, 505, 606, 707, 808, 909, 1010, 1111],
+  "name": "The Invincibles"
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": 42,
+  "name": "The Invincibles",
+  "budget_remaining": 3.5,
+  "total_cost": 96.5,
+  "total_points": 0,
+  "overall_rank": null,
+  "free_transfers_banked": 1,
+  "players": [
+    {
+      "player_id": 101,
+      "name": "Alisson Becker",
+      "position": "GK",
+      "team_name": "Liverpool",
+      "purchase_price": 5.5,
+      "current_price": 5.5,
+      ...
+    },
+    ...
+  ]
+}
+```
+
+**Validation error (400):**
+```json
+{
+  "detail": {
+    "errors": [
+      "Squad costs £105.5 — £5.5 over the £100.0 budget.",
+      "Need exactly 1 GK (you have 0).",
+      "Maximum 2 players per club (Manchester City has 3)."
+    ]
+  }
+}
+```
+
+**Browse players:**
+```http
+GET /api/v1/players?position=FWD&page=1&per_page=20
+Authorization: Bearer <token>
+```
+
+### Validation rules (centralized in `services/squads/validation.py`)
+
+The same `validate_squad()` function is used by squad creation, squad replacement,
+and will be reused for transfer previews (Step 13) without modification.
+
+Checks run in order:
+1. **Pre-DB**: exact count (11), no duplicate IDs
+2. **Player lookup**: all IDs must exist in the active season
+3. **Position counts**: 1 GK, 3 DEF, 4 MID, 3 FWD exactly
+4. **Budget**: `sum(current_price) ≤ £100.0`
+5. **Club limit**: max 2 players per real-world club
+6. **Availability**: no players with `is_available=False`
+
+All violations are collected and returned together — users see every error at once.
+
+### Create vs. Replace behavior
+
+- `POST /squad` — creates the squad; returns `409` if one already exists.
+- `PUT /squad` — replaces all active players (soft-deletes old rows, inserts new ones). Returns `403` if any GW is LOCKED or beyond. The soft-delete preserves history for future transfer audit.
+- After the season locks, only the transfer system (Step 13) can change the squad.
+
+### Squad service structure
+
+```
+services/squads/
+  __init__.py
+  constants.py    ← BUDGET_CAP, SQUAD_SIZE, POSITION_REQUIREMENTS, MAX_PER_CLUB
+  validation.py   ← validate_player_ids(), validate_squad() — pure, no DB
+  service.py      ← create_squad(), replace_squad(), get_squad_detail(), list_players()
+```
+
+### What is intentionally deferred
+
+- **Captain / vice-captain** — Step 12. Fields exist on `gameweek_lineups` already.
+- **Transfer system** — Step 13. `SquadPlayer.left_gameweek_id` and `transfers` table are ready.
+- **Bench / auto-subs** — not in MVP scope.
+- **Free transfers banking** — Step 13. `free_transfers_banked` field exists, logic not yet applied.
+- **Squad points / ranking** — Step X (scoring). `total_points` and `overall_rank` fields exist.
+
+---
+
 ## Step 9 — Custom Pricing Engine
 
 ### How the pricing system works

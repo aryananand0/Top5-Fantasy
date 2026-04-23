@@ -1,98 +1,144 @@
-import Link from 'next/link'
+'use client'
+
 import { PageShell } from '@/components/ui/PageShell'
-import { Card } from '@/components/ui/Card'
-import { Badge, PositionBadge } from '@/components/ui/Badge'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
+import { Badge, PositionBadge } from '@/components/ui/Badge'
 import { Divider } from '@/components/ui/Divider'
-import { mockSquad, mockGameweek, mockUser } from '@/lib/mock-data'
-import { cn } from '@/lib/cn'
-import type { MockPlayer } from '@/lib/mock-data'
+import { SquadFormationBoard } from '@/components/squad/SquadFormationBoard'
+import { PlayerSearchPanel } from '@/components/squad/PlayerSearchPanel'
+import { SquadSummaryBar } from '@/components/squad/SquadSummaryBar'
+import { GameweekBanner } from '@/components/lineup/GameweekBanner'
+import { CaptainPicker } from '@/components/lineup/CaptainPicker'
+import { useSquadBuilder } from '@/hooks/useSquadBuilder'
+import { useCurrentLineup } from '@/hooks/useCurrentLineup'
 
-const starters = mockSquad.filter((p) => p.isStarting)
-const bench    = mockSquad.filter((p) => !p.isStarting)
-const gk  = starters.filter((p) => p.position === 'GK')
-const def = starters.filter((p) => p.position === 'DEF')
-const mid = starters.filter((p) => p.position === 'MID')
-const fwd = starters.filter((p) => p.position === 'FWD')
+// ── Loading skeleton ───────────────────────────────────────────────────────────
 
-const totalGwPts = starters.reduce((sum, p) => {
-  const pts = p.isCaptain ? p.gwPts * 2 : p.gwPts
-  return sum + pts
-}, 0)
+function LoadingSkeleton() {
+  return (
+    <PageShell maxWidth="lg">
+      <div className="animate-pulse space-y-4">
+        <div className="h-8 bg-paper-darker rounded-xl w-40" />
+        <div className="h-16 bg-paper-darker rounded-2xl" />
+        <div className="h-64 bg-paper-darker rounded-2xl" />
+        <div className="h-48 bg-paper-darker rounded-2xl" />
+      </div>
+    </PageShell>
+  )
+}
 
-// ── Pitch slot ───────────────────────────────────────────────────────────────
-function PitchSlot({ player, dark = false }: { player: MockPlayer; dark?: boolean }) {
-  const initial = player.name.charAt(0)
-  const shortName = player.name.split(' ')[0]
-  const pts = player.isCaptain ? player.gwPts * 2 : player.gwPts
+// ── Lineup section (captain/VC picker) ────────────────────────────────────────
+
+function LineupSection() {
+  const {
+    loadState,
+    lineup,
+    pendingCaptainId,
+    pendingVcId,
+    setPendingCaptain,
+    setPendingVC,
+    hasUnsavedChanges,
+    selectionIsValid,
+    saveState,
+    saveError,
+    saveSelection,
+  } = useCurrentLineup()
+
+  if (loadState === 'loading') {
+    return (
+      <div className="animate-pulse rounded-2xl border-2 border-ink-faint bg-paper h-20" />
+    )
+  }
+
+  if (loadState === 'no_squad' || loadState === 'no_gameweek' || !lineup) {
+    return null
+  }
+
+  if (loadState === 'error') {
+    return null
+  }
 
   return (
-    <div className="flex flex-col items-center gap-1.5 min-w-0">
-      <div className="relative">
-        <div className="w-10 h-10 rounded-full bg-paper border-2 border-ink shadow-sketch-sm flex items-center justify-center">
-          <span className="text-xs font-black text-ink leading-none">{initial}</span>
-        </div>
-        {player.isCaptain && (
-          <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-marker-yellow border border-ink flex items-center justify-center">
-            <span className="text-[0.5rem] font-black text-ink leading-none">C</span>
-          </div>
-        )}
-        {player.isVC && (
-          <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-ink border border-ink flex items-center justify-center">
-            <span className="text-[0.5rem] font-black text-paper leading-none">V</span>
-          </div>
-        )}
-      </div>
-      <div className="flex flex-col items-center gap-0.5">
-        <span className={cn('text-[0.65rem] font-bold leading-none truncate max-w-[56px] text-center', dark ? 'text-white' : 'text-ink')}>
-          {shortName}
-        </span>
-        <span className={cn('text-[0.6rem] leading-none', dark ? 'text-white/60' : 'text-ink-muted')}>
-          {pts}pts
-        </span>
-      </div>
+    <div className="flex flex-col gap-3">
+      <GameweekBanner
+        gameweekNumber={lineup.gameweek_number}
+        gameweekName={lineup.gameweek_name}
+        deadline={lineup.gameweek_deadline}
+        status={lineup.gameweek_status}
+        isEditable={lineup.is_editable}
+      />
+
+      <SectionHeader
+        title="Captain & Vice-Captain"
+        subtitle={
+          lineup.is_editable
+            ? 'Captain earns 2× points · VC covers if captain doesn\'t play'
+            : 'Lineup locked'
+        }
+        className="mb-0"
+      />
+
+      <CaptainPicker
+        players={lineup.players}
+        captainId={pendingCaptainId}
+        vcId={pendingVcId}
+        isEditable={lineup.is_editable}
+        isLocked={lineup.is_locked}
+        hasUnsavedChanges={hasUnsavedChanges}
+        selectionIsValid={selectionIsValid}
+        saveState={saveState}
+        saveError={saveError}
+        onSetCaptain={setPendingCaptain}
+        onSetVC={setPendingVC}
+        onSave={saveSelection}
+      />
     </div>
   )
 }
 
-// ── Formation row ────────────────────────────────────────────────────────────
-function PitchRow({ players, label }: { players: MockPlayer[]; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <span className="label-text text-white/50 text-center">{label}</span>
-      <div className="flex items-center justify-center gap-2 sm:gap-4 w-full">
-        {players.map((p) => (
-          <PitchSlot key={p.id} player={p} dark />
-        ))}
-      </div>
-    </div>
-  )
-}
+// ── View mode: existing squad display ─────────────────────────────────────────
 
-export default function SquadPage() {
-  const formation = `${def.length}-${mid.length}-${fwd.length}`
-  const budgetUsed = 100 - mockUser.budget
-  const budgetPct  = (budgetUsed / 100) * 100
+function ViewSquad({
+  squad,
+  onEdit,
+}: {
+  squad: NonNullable<ReturnType<typeof useSquadBuilder>['existingSquad']>
+  onEdit: () => void
+}) {
+  const budgetUsed = squad.total_cost
+  const budgetPct = Math.min(100, (budgetUsed / 100) * 100)
+
+  const sortOrder = { GK: 0, DEF: 1, MID: 2, FWD: 3 }
+  const sorted = [...squad.players].sort(
+    (a, b) => sortOrder[a.position] - sortOrder[b.position],
+  )
 
   return (
     <PageShell maxWidth="lg">
-      {/* ── Header row ──────────────────────────────────────────────────────── */}
       <SectionHeader
-        title="My Squad"
-        subtitle={`GW${mockGameweek.number} · Formation ${formation}`}
+        title={squad.name}
+        subtitle={`${squad.players.length} players · ${squad.total_points} pts`}
         action={
-          <Link href="/transfers">
-            <Button variant="tinted" color="blue" size="sm">Transfers</Button>
-          </Link>
+          <Button variant="tinted" color="blue" size="sm" onClick={onEdit}>
+            Manage
+          </Button>
         }
         className="mb-4"
       />
 
-      {/* ── Budget bar ──────────────────────────────────────────────────────── */}
-      <Card variant="flat" padding="sm" className="mb-4">
+      {/* ── Gameweek lineup section ── */}
+      <div className="mb-4">
+        <LineupSection />
+      </div>
+
+      <Divider style="wavy" spacing="sm" />
+
+      {/* Budget bar */}
+      <Card variant="flat" padding="sm" className="mb-4 mt-2">
         <div className="flex items-center justify-between mb-2">
-          <span className="label-text text-ink-muted">Budget used</span>
+          <span className="label-text text-ink-muted text-xs">Budget used</span>
           <span className="font-display font-bold text-sm text-ink">
             £{budgetUsed.toFixed(1)}M / £100M
           </span>
@@ -105,82 +151,178 @@ export default function SquadPage() {
         </div>
         <div className="flex items-center justify-between mt-2">
           <span className="text-xs text-ink-muted">
-            <span className="font-bold text-marker-green">£{mockUser.budget}M</span> remaining
+            <span className="font-bold text-marker-green">
+              £{squad.budget_remaining.toFixed(1)}M
+            </span>{' '}
+            remaining
           </span>
-          <Badge color="orange" variant="tinted" size="sm">Team Value £{mockUser.teamValue}M</Badge>
+          <Badge color="orange" variant="tinted" size="sm">
+            Team Value £{(100 - squad.budget_remaining).toFixed(1)}M
+          </Badge>
         </div>
       </Card>
 
-      {/* ── Pitch ───────────────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border-2 border-ink overflow-hidden shadow-sketch-md mb-4">
-        {/* Playing surface */}
-        <div className="bg-[#2E7D52] p-4 space-y-5">
-          {/* Centre line */}
-          <div className="w-full border-t border-white/10 pt-2" />
-          <PitchRow players={fwd} label="FWD" />
-          <PitchRow players={mid} label="MID" />
-          <PitchRow players={def} label="DEF" />
-          <PitchRow players={gk}  label="GK"  />
-        </div>
-
-        {/* Bench */}
-        <div className="bg-paper-dark border-t-2 border-ink p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="label-text text-ink-muted">Bench</span>
-            <span className="text-xs text-ink-muted">Auto-substitutions active</span>
-          </div>
-          <div className="flex items-center justify-around">
-            {bench.map((p) => (
-              <PitchSlot key={p.id} player={p} />
-            ))}
-          </div>
-        </div>
+      {/* Pitch formation */}
+      <div className="mb-4">
+        <SquadFormationBoard
+          mode="view"
+          selectedMap={{}}
+          activeSlot={null}
+          onSlotClick={() => {}}
+          onRemoveSlot={() => {}}
+          viewPlayers={squad.players}
+        />
       </div>
 
-      {/* ── GW points summary ───────────────────────────────────────────────── */}
-      <Card variant="flat" padding="sm" className="mb-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="label-text text-ink-muted">Gameweek {mockGameweek.number} points</p>
-            <p className="num text-3xl text-marker-green mt-1">{totalGwPts}</p>
-          </div>
-          <div className="text-right">
-            <p className="label-text text-ink-muted">Captain bonus</p>
-            <p className="num text-2xl text-marker-yellow mt-1">
-              +{mockSquad.find(p => p.isCaptain)?.gwPts ?? 0}
-            </p>
-          </div>
-        </div>
-      </Card>
+      <Divider style="dashed" spacing="sm" />
 
-      <Divider style="wavy" spacing="sm" />
-
-      {/* ── Player list ─────────────────────────────────────────────────────── */}
+      {/* Player detail list */}
       <SectionHeader title="Player Details" className="mb-3 mt-1" />
       <div className="flex flex-col gap-2">
-        {starters.map((player) => (
-          <Link key={player.id} href={`/players/${player.id}`}>
-            <Card variant="flat" padding="sm" className="hover:-translate-y-px transition-transform">
-              <div className="flex items-center gap-3">
-                <PositionBadge position={player.position} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-display font-bold text-sm text-ink truncate">{player.name}</span>
-                    {player.isCaptain && <Badge color="yellow" variant="solid" size="sm">C</Badge>}
-                    {player.isVC && <Badge color="ink" variant="outline" size="sm">VC</Badge>}
-                  </div>
-                  <span className="text-xs text-ink-muted">{player.club}</span>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className="num text-lg text-ink">{player.isCaptain ? player.gwPts * 2 : player.gwPts}</span>
-                  <span className="text-xs text-ink-muted ml-0.5">pts</span>
-                </div>
-                <span className="font-bold text-sm text-ink-muted">£{player.price}M</span>
+        {sorted.map((player) => (
+          <Card key={player.player_id} variant="flat" padding="sm">
+            <div className="flex items-center gap-3">
+              <PositionBadge position={player.position} />
+              <div className="flex-1 min-w-0">
+                <p className="font-display font-bold text-sm text-ink truncate">
+                  {player.display_name ?? player.name}
+                </p>
+                <p className="text-xs text-ink-muted">{player.team_name}</p>
               </div>
-            </Card>
-          </Link>
+              <div className="text-right shrink-0">
+                <p className="font-display font-bold text-sm text-ink">
+                  £{player.current_price.toFixed(1)}M
+                </p>
+                {player.form_score > 0 && (
+                  <p className="text-[0.65rem] text-marker-green font-bold">
+                    {player.form_score.toFixed(1)} form
+                  </p>
+                )}
+              </div>
+            </div>
+          </Card>
         ))}
       </div>
     </PageShell>
   )
+}
+
+// ── Build / Edit mode ─────────────────────────────────────────────────────────
+
+function BuildSquad({
+  builder,
+}: {
+  builder: ReturnType<typeof useSquadBuilder>
+}) {
+  const {
+    mode,
+    existingSquad,
+    selectedMap,
+    activeSlot,
+    setActiveSlot,
+    addPlayer,
+    removeSlot,
+    budgetRemaining,
+    positionCounts,
+    clubCounts,
+    selectedCount,
+    isReady,
+    searchQuery,
+    setSearchQuery,
+    positionFilter,
+    setPositionFilter,
+    browserPlayers,
+    browserLoading,
+    browserPage,
+    browserTotalPages,
+    loadMorePlayers,
+    validationErrors,
+    saveError,
+    saveSquad,
+    cancelBuildMode,
+  } = builder
+
+  const isSaving = mode === 'saving'
+  const activePosition = activeSlot
+    ? (activeSlot.split('-')[0] as 'GK' | 'DEF' | 'MID' | 'FWD')
+    : null
+
+  return (
+    <PageShell maxWidth="lg">
+      <SectionHeader
+        title={existingSquad ? 'Edit Squad' : 'Build Squad'}
+        subtitle={
+          existingSquad
+            ? 'Replace your current squad (full swap)'
+            : 'Pick 11 players · £100M budget · max 2 per club'
+        }
+        className="mb-4"
+      />
+
+      {/* ── Desktop: two-column layout ── */}
+      <div className="md:grid md:grid-cols-[1fr_340px] md:gap-5 md:items-start">
+        {/* Left: formation board + summary bar */}
+        <div className="flex flex-col gap-4">
+          <SquadFormationBoard
+            mode={mode}
+            selectedMap={selectedMap}
+            activeSlot={activeSlot}
+            onSlotClick={setActiveSlot}
+            onRemoveSlot={removeSlot}
+          />
+
+          <SquadSummaryBar
+            budgetRemaining={budgetRemaining}
+            positionCounts={positionCounts}
+            selectedCount={selectedCount}
+            isReady={isReady}
+            isSaving={isSaving}
+            validationErrors={validationErrors}
+            saveError={saveError}
+            onSave={() => saveSquad()}
+            onCancel={cancelBuildMode}
+            hasExistingSquad={!!existingSquad}
+          />
+        </div>
+
+        {/* Right: player browser */}
+        <div className="mt-4 md:mt-0 md:sticky md:top-20">
+          <div className="rounded-2xl border-2 border-ink bg-paper shadow-sketch p-4">
+            <p className="label-text text-ink-muted mb-3">Player Browser</p>
+            <PlayerSearchPanel
+              players={browserPlayers}
+              loading={browserLoading}
+              page={browserPage}
+              totalPages={browserTotalPages}
+              onLoadMore={loadMorePlayers}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              positionFilter={positionFilter}
+              onPositionChange={setPositionFilter}
+              selectedMap={selectedMap}
+              clubCounts={clubCounts}
+              budgetRemaining={budgetRemaining}
+              activePosition={activePosition}
+              onAddPlayer={addPlayer}
+            />
+          </div>
+        </div>
+      </div>
+    </PageShell>
+  )
+}
+
+// ── Page root ─────────────────────────────────────────────────────────────────
+
+export default function SquadPage() {
+  const builder = useSquadBuilder()
+  const { mode, existingSquad, enterBuildMode } = builder
+
+  if (mode === 'loading') return <LoadingSkeleton />
+
+  if (mode === 'view' && existingSquad) {
+    return <ViewSquad squad={existingSquad} onEdit={enterBuildMode} />
+  }
+
+  return <BuildSquad builder={builder} />
 }
