@@ -1,8 +1,10 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/cn'
+import { getStoredUser } from '@/lib/api/auth'
 
 const desktopNavItems = [
   { href: '/dashboard', label: 'Home'      },
@@ -74,6 +76,21 @@ function BellIcon() {
 export function TopBar() {
   const pathname = usePathname()
   const title = getPageTitle(pathname)
+  const [displayLabel, setDisplayLabel] = useState('...')
+  const [initials, setInitials] = useState('?')
+
+  useEffect(() => {
+    const user = getStoredUser()
+    if (!user) return
+    const name = user.display_name || user.username
+    setDisplayLabel(name.length > 12 ? name.slice(0, 10) + '…' : name)
+    const parts = name.split(/[\s_]+/)
+    setInitials(
+      parts.length >= 2
+        ? (parts[0][0] + parts[1][0]).toUpperCase()
+        : name.slice(0, 2).toUpperCase()
+    )
+  }, [pathname])
 
   return (
     <header className="sticky top-0 z-40 bg-paper border-b-2 border-ink">
@@ -152,9 +169,9 @@ export function TopBar() {
           aria-label="Profile"
         >
           <div className="w-6 h-6 rounded-full bg-tint-purple border-2 border-marker-purple flex items-center justify-center">
-            <span className="text-[0.6rem] font-black text-ink leading-none">AF</span>
+            <span className="text-[0.6rem] font-black text-ink leading-none">{initials}</span>
           </div>
-          <span className="hidden lg:inline">Alex F.</span>
+          <span className="hidden lg:inline">{displayLabel}</span>
         </Link>
       </div>
     </header>

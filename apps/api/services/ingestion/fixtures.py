@@ -73,7 +73,7 @@ def _parse_fixture_row(
         "status": status,
         "home_score": home_score,
         "away_score": away_score,
-        "data_quality_status": DataQuality.FULL,
+        "data_quality_status": DataQuality.FULL.value,
         "fetched_at": datetime.now(tz=timezone.utc),
     }
 

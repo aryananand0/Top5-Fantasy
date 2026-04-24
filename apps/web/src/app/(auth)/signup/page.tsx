@@ -1,10 +1,12 @@
-import type { Metadata } from 'next'
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Pill } from '@/components/ui/Pill'
-
-export const metadata: Metadata = { title: 'Create Account' }
+import { apiSignup, apiLogin, apiMe, saveSession, ApiError } from '@/lib/api/auth'
 
 const perks = [
   { color: 'green' as const, label: 'Free to play' },
@@ -13,9 +15,38 @@ const perks = [
 ]
 
 export default function SignupPage() {
+  const router = useRouter()
+  const [displayName, setDisplayName] = useState('')
+  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      await apiSignup({
+        email,
+        username,
+        password,
+        display_name: displayName || undefined,
+      })
+      const { access_token } = await apiLogin({ login: email, password })
+      const user = await apiMe(access_token)
+      saveSession(access_token, user)
+      router.push('/squad')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Sign up failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-page py-12">
-      {/* Brand */}
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex flex-col items-center gap-3 group">
           <div className="w-14 h-14 rounded-2xl bg-ink border-2 border-ink shadow-sketch flex items-center justify-center group-hover:-translate-y-px transition-transform">
@@ -30,33 +61,33 @@ export default function SignupPage() {
         </div>
       </div>
 
-      {/* Card */}
       <div className="w-full max-w-sm border-2 border-ink bg-paper rounded-2xl shadow-sketch p-6 md:p-7">
         <h1 className="font-display font-bold text-xl text-ink mb-6">Create your account</h1>
 
-        {/* Form — wired up to a server action in a later step */}
-        <form className="flex flex-col gap-4" action="#" method="POST">
+        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <Input
             label="Display Name"
             type="text"
-            name="displayName"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
             placeholder="e.g. Alex Freeman"
             autoComplete="name"
             hint="Shown in leagues and standings"
-            required
           />
           <Input
-            label="Team Name"
+            label="Username"
             type="text"
-            name="teamName"
-            placeholder="e.g. Red Devils United"
-            hint="Your fantasy team's name"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="e.g. alexf99"
+            hint="Letters, numbers, underscores only"
             required
           />
           <Input
             label="Email"
             type="email"
-            name="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             autoComplete="email"
             required
@@ -64,18 +95,21 @@ export default function SignupPage() {
           <Input
             label="Password"
             type="password"
-            name="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             placeholder="At least 8 characters"
             autoComplete="new-password"
             hint="Minimum 8 characters"
             required
           />
 
-          <Link href="/onboarding" className="mt-1">
-            <Button variant="primary" size="md" fullWidth type="button">
-              Create Account
-            </Button>
-          </Link>
+          {error && (
+            <p className="text-xs text-red-600 font-medium -mt-1">{error}</p>
+          )}
+
+          <Button variant="primary" size="md" fullWidth type="submit" disabled={loading} className="mt-1">
+            {loading ? 'Creating account…' : 'Create Account'}
+          </Button>
         </form>
 
         <p className="text-center text-xs text-ink-muted mt-4 leading-relaxed">
@@ -85,7 +119,6 @@ export default function SignupPage() {
           <a href="#" className="underline underline-offset-2 hover:text-ink">Privacy Policy</a>.
         </p>
 
-        {/* Divider */}
         <div className="flex items-center gap-3 my-5">
           <div className="flex-1 border-t border-dashed border-ink-faint" />
           <span className="text-xs text-ink-faint font-medium">already playing?</span>

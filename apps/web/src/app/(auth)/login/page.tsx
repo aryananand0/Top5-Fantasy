@@ -1,14 +1,37 @@
-import type { Metadata } from 'next'
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
-
-export const metadata: Metadata = { title: 'Log In' }
+import { apiLogin, apiMe, saveSession, ApiError } from '@/lib/api/auth'
 
 export default function LoginPage() {
+  const router = useRouter()
+  const [login, setLogin] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      const { access_token } = await apiLogin({ login, password })
+      const user = await apiMe(access_token)
+      saveSession(access_token, user)
+      router.push('/dashboard')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Login failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-page py-12">
-      {/* Brand */}
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex flex-col items-center gap-3 group">
           <div className="w-14 h-14 rounded-2xl bg-ink border-2 border-ink shadow-sketch flex items-center justify-center group-hover:-translate-y-px transition-transform">
@@ -19,16 +42,15 @@ export default function LoginPage() {
         <p className="text-sm text-ink-muted mt-1">Welcome back. Your squad awaits.</p>
       </div>
 
-      {/* Card */}
       <div className="w-full max-w-sm border-2 border-ink bg-paper rounded-2xl shadow-sketch p-6 md:p-7">
         <h1 className="font-display font-bold text-xl text-ink mb-6">Log in to your account</h1>
 
-        {/* Form — wired up to a server action in a later step */}
-        <form className="flex flex-col gap-4" action="#" method="POST">
+        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <Input
-            label="Email"
-            type="email"
-            name="email"
+            label="Email or Username"
+            type="text"
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
             placeholder="you@example.com"
             autoComplete="email"
             required
@@ -36,26 +58,22 @@ export default function LoginPage() {
           <Input
             label="Password"
             type="password"
-            name="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             autoComplete="current-password"
             required
           />
 
-          <div className="flex items-center justify-end">
-            <a href="#" className="text-xs text-ink-muted hover:text-ink underline underline-offset-2 transition-colors">
-              Forgot password?
-            </a>
-          </div>
+          {error && (
+            <p className="text-xs text-red-600 font-medium -mt-1">{error}</p>
+          )}
 
-          <Link href="/dashboard" className="mt-1">
-            <Button variant="primary" size="md" fullWidth type="button">
-              Log In
-            </Button>
-          </Link>
+          <Button variant="primary" size="md" fullWidth type="submit" disabled={loading} className="mt-1">
+            {loading ? 'Logging in…' : 'Log In'}
+          </Button>
         </form>
 
-        {/* Divider */}
         <div className="flex items-center gap-3 my-5">
           <div className="flex-1 border-t border-dashed border-ink-faint" />
           <span className="text-xs text-ink-faint font-medium">or</span>
@@ -70,7 +88,6 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* Back */}
       <Link href="/" className="mt-6 text-xs text-ink-faint hover:text-ink transition-colors">
         ← Back to homepage
       </Link>

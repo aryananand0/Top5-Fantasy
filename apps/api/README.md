@@ -524,6 +524,222 @@ python scripts/gameweeks.py refresh --season 2024-25
 
 ---
 
+## Step 14 — Scoring Engine
+
+### How the scoring engine works
+
+After match data is ingested, the scoring engine computes fantasy points in three stages:
+
+1. **Per-fixture player scoring** (`compute_fixture_player_points`)
+   Reads each `PlayerMatchStats` row, resolves clean sheet eligibility, runs the rules engine,
+   and writes `fantasy_points` back to the row.
+
+2. **Lineup aggregation** (`compute_and_save_lineup_points`)
+   For each locked gameweek lineup, sums each player's `fantasy_points` across all FINISHED
+   fixtures in the gameweek, applies the captain 2× multiplier (or VC fallback), and writes
+   `GameweekLineupPlayer.points_scored` and `GameweekLineup.points_scored`.
+
+3. **User gameweek score** (`_upsert_user_gw_score`)
+   Subtracts the transfer hit from the lineup total and upserts a `UserGameweekScore` row.
+   This is the record that powers leaderboards and the dashboard.
+
+### Target scoring model
+
+| Event | Points |
+|-------|--------|
+| Starting appearance | +1 |
+| 60+ minutes played | +1 (RICH mode only) |
+| Goal by FWD | +4 |
+| Goal by MID | +5 |
+| Goal by DEF / GK | +6 |
+| Assist | +3 |
+| Clean sheet (DEF / GK) | +4 |
+| Yellow card | -1 |
+| Red card | -3 |
+| Own goal | -2 |
+| Captain | 2× total |
+
+### Scoring modes (RICH vs FALLBACK)
+
+The scoring engine has two modes, set at the gameweek level (`Gameweek.scoring_mode`):
+
+| Mode | When | Differences |
+|------|------|-------------|
+| `RICH` | Default when full data is available | All rules applied (60+ bonus, clean sheets with 60+ requirement) |
+| `FALLBACK` | When data is estimated/incomplete | 60+ bonus skipped; clean sheet requires only `appeared=True` |
+
+A fixture can also override to FALLBACK via `Fixture.data_quality_status = ESTIMATED`,
+regardless of the GW setting. This means a GW can be RICH overall but score one incomplete
+fixture in FALLBACK mode automatically.
+
+### Captain and vice-captain rules
+
+- **Captain** gets 2× their total GW fantasy points.
+- **Vice-captain** gets 2× **only if** the captain did not appear in any fixture in the GW.
+  "Did not appear" = no `PlayerMatchStats` row with `appeared=True` for any GW fixture.
+- If neither captain nor VC appeared, no 2× is applied (edge case).
+
+### Clean sheet rule
+
+| Mode | Eligibility |
+|------|-------------|
+| RICH | Position must be DEF/GK + `minutes_played >= 60` + team conceded 0 |
+| FALLBACK | Position must be DEF/GK + `appeared=True` + team conceded 0 |
+
+Clean sheets are always derived from the fixture result (`home_score`/`away_score`).
+If the score is not yet confirmed (NULL), no clean sheet is awarded for that fixture.
+
+### Transfer hit deduction
+
+Extra transfers above the free allowance are deducted from the user's GW score:
+`final_points = lineup_points - transfer_cost_applied`
+
+The `transfer_cost_applied` field is set by the transfer service at apply time.
+The scoring engine reads it directly from `GameweekLineup.transfer_cost_applied`.
+
+### Persistence
+
+| Table | Written by | What |
+|-------|-----------|------|
+| `player_match_stats.fantasy_points` | `compute_fixture_player_points` | Per player per fixture |
+| `player_match_stats.clean_sheet` | `compute_fixture_player_points` | Resolved clean sheet flag |
+| `gameweek_lineup_players.points_scored` | `compute_and_save_lineup_points` | Per player GW total (with 2×) |
+| `gameweek_lineups.points_scored` | `compute_and_save_lineup_points` | Lineup total before transfer hit |
+| `user_gameweek_scores` | `_upsert_user_gw_score` | Final score, transfer cost, captain bonus, rank |
+
+### Recompute / re-run behaviour
+
+All scoring operations are **idempotent**: re-running with updated data overwrites prior values.
+Safe to re-run any time after new fixture data arrives.
+
+Recommended re-run order:
+1. `python scripts/sync.py fixtures` — pull latest match results + player stats
+2. `python scripts/score.py score-gameweek <id>` — recompute everything
+3. `python scripts/score.py finalize-ranks <id>` — reassign ranks
+
+### Running scoring commands
+
+```bash
+# From apps/api/
+
+# Score all players in one finished fixture
+python scripts/score.py score-fixture 42
+
+# Full gameweek scoring pass (fixtures → lineups → user scores)
+python scripts/score.py score-gameweek 5
+
+# Assign rank_global to all users after all GW scores are in
+python scripts/score.py finalize-ranks 5
+
+# Recompute one user's GW score (e.g. after manual data fix)
+python scripts/score.py recompute-user 5 12
+```
+
+### Typical post-match workflow
+
+```bash
+# After GW 5 finishes:
+python scripts/sync.py fixtures          # 1. Pull latest results from football-data.org
+python scripts/score.py score-gameweek 5 # 2. Score everything in GW 5
+python scripts/score.py finalize-ranks 5 # 3. Assign global rankings
+python scripts/pricing.py update-prices --season 2024-25 --gameweek 5  # 4. Update prices
+```
+
+### Scoring API routes
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/v1/gameweeks/current/score` | Required | Current user's score for current GW |
+| `GET` | `/api/v1/gameweeks/{id}/score` | Required | Current user's score for a specific GW |
+
+Returns `202 Accepted` with a `message` field if the scoring job hasn't run yet for that GW.
+
+### Scoring service structure
+
+```
+services/scoring/
+  __init__.py                   ← public surface: score_gameweek, compute_*, finalize_ranks
+  rules.py                      ← pure scoring constants + score_player_fixture() function
+  utils.py                      ← resolve_scoring_mode(), resolve_clean_sheet()
+  compute_player_points.py      ← compute_fixture_player_points() — scores one fixture
+  compute_lineup_points.py      ← compute_and_save_lineup_points() — lineup aggregation
+  aggregate_gameweek_scores.py  ← score_gameweek(), finalize_gameweek_ranks()
+```
+
+### What is intentionally deferred
+
+- **Global leaderboard surface** — Step 17. `rank_global` is computed here; the UI surfaces it later.
+- **Mini-league standings** — Step 16. The `user_gameweek_scores` table powers them; no join logic yet.
+- **Automatic scoring triggers** — no cron/worker in MVP. Run `scripts/score.py` manually.
+- **Live/in-progress scoring** — no websocket or polling. Scores are written once per GW after all matches.
+- **Player form update after scoring** — run `scripts/pricing.py update-prices` after scoring is done.
+- **GW status transition to FINISHED** — `score_gameweek` does NOT auto-transition the GW status.
+  Run `python scripts/gameweeks.py refresh` after scoring to update statuses.
+
+---
+
+## Step 15 — Dashboard
+
+### Overview
+
+A single aggregated `GET /api/v1/dashboard` endpoint assembles the full dashboard payload
+for the authenticated user in one pass. The frontend makes exactly one call on load —
+no waterfall requests, no separate score/squad/fixtures calls.
+
+### Response shape
+
+| Field group | Description |
+|-------------|-------------|
+| `gameweek_*` | Current GW id, number, name, status, deadline |
+| `gw_points / gw_raw_points` | Final (after hit) and raw points. `null` until scoring job runs |
+| `gw_transfer_cost / gw_captain_bonus` | Deductions and bonus included in the score |
+| `gw_rank` | Global rank. `null` until `finalize_gameweek_ranks()` runs |
+| `season_points` | Sum of all `UserGameweekScore.points` for this user |
+| `captain / vice_captain` | Player name, position, team, GW points (null before scoring) |
+| `has_squad / has_lineup / is_editable / can_transfer` | State flags for conditional UI |
+| `free_transfers / transfers_made / transfer_hit` | Transfer window summary |
+| `budget_remaining` | Squad budget in millions (e.g. `4.5`) |
+| `fixtures` | Up to 5 fixtures for the current GW, ordered by kickoff. `has_squad_players=true` when the user has players in either team |
+
+### Response paths
+
+| Condition | Behaviour |
+|-----------|-----------|
+| No current gameweek | All GW/score fields are `null`; `fixtures=[]` |
+| No squad | GW fields populated; squad/lineup/transfer fields are safe defaults |
+| Full response | All fields populated from squad, lineup, score, transfer records |
+
+### Editability flags
+
+- `is_editable = gw.status == UPCOMING and (lineup is None or not lineup.is_locked)`
+- `can_transfer = gw.status == UPCOMING`
+
+### API route
+
+```
+GET /api/v1/dashboard
+Authorization: Bearer <token>
+→ 200 DashboardSummary
+```
+
+### Service structure
+
+```
+services/dashboard/
+  __init__.py     ← public surface: get_dashboard_summary
+  service.py      ← _no_gameweek_response, _no_squad_response, _full_response,
+                     _build_captain_info, _get_fixtures
+```
+
+### What is intentionally deferred
+
+- **Season team value** — not surfaced (requires summing player prices; deferred to Step 18).
+- **Average GW points** — no population-level aggregate on this endpoint.
+- **Mini-league standings** — Step 16.
+- **Global leaderboard context** — Step 17.
+
+---
+
 ## Running Tests
 
 ```bash

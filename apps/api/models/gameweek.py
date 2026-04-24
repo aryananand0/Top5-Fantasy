@@ -39,7 +39,7 @@ class Gameweek(Base, TimestampMixin):
     # RICH = minutes, assists, cards, clean sheets all available.
     # FALLBACK = goals and result only; partial bonus points skipped.
     scoring_mode: Mapped[ScoringMode] = mapped_column(
-        SAEnum(ScoringMode, name="scoring_mode_enum"),
+        SAEnum(ScoringMode, name="scoring_mode_enum", values_callable=lambda x: [e.value for e in x]),
         default=ScoringMode.RICH,
         nullable=False,
     )

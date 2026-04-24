@@ -42,7 +42,7 @@ class Fixture(Base):
     # Tracks completeness of data received for this fixture.
     # Scoring job uses this to decide whether to apply RICH or FALLBACK mode.
     data_quality_status: Mapped[DataQuality] = mapped_column(
-        SAEnum(DataQuality, name="data_quality_enum"),
+        SAEnum(DataQuality, name="data_quality_enum", values_callable=lambda x: [e.value for e in x]),
         default=DataQuality.FULL,
         nullable=False,
     )
@@ -100,7 +100,7 @@ class PlayerMatchStats(Base):
     fantasy_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     data_quality: Mapped[DataQuality] = mapped_column(
-        SAEnum(DataQuality, name="data_quality_enum"),
+        SAEnum(DataQuality, name="data_quality_enum", values_callable=lambda x: [e.value for e in x]),
         default=DataQuality.FULL,
         nullable=False,
     )

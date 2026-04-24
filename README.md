@@ -38,35 +38,90 @@ top5-fantasy/
 
 ### Prerequisites
 
-- Node.js 20+
+- Docker (for Postgres) — or a local Postgres 15+ install
 - Python 3.11+
-- PostgreSQL 15+
+- Node.js 20+
+- A free [football-data.org](https://www.football-data.org/client/register) API key
 
-### Running the frontend
-
-```bash
-cd apps/web
-npm install
-npm run dev
-# Runs on http://localhost:3000
-```
-
-### Running the backend
+### 1 — Install dependencies (once)
 
 ```bash
-cd apps/api
-python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload
-# Runs on http://localhost:8000
+make setup
 ```
 
-### Environment variables
+This installs Python packages (`pip install -r requirements.txt`) and Node packages (`npm install`) for both apps.
 
-Copy `.env.example` to `.env` in the project root and fill in your values. See `.env.example` for required variables.
+### 2 — Add your football-data.org API key
 
-The frontend reads from `apps/web/.env.local` and the backend reads from `apps/api/.env`.
+Open `apps/api/.env` and paste your key:
+
+```
+FOOTBALL_DATA_API_KEY=your_key_here
+```
+
+All other values in that file are pre-filled for local Docker Postgres — you do not need to change them.
+
+### 3 — Start Postgres
+
+```bash
+make db
+```
+
+Starts a Postgres 16 container on `localhost:5432` (db: `top5fantasy`, user: `postgres`, password: `postgres`).
+Data persists across restarts in a Docker volume.
+
+### 4 — Run migrations
+
+```bash
+make migrate
+```
+
+Applies all Alembic migrations and creates the full schema.
+
+### 5 — Pull soccer data
+
+```bash
+make sync
+```
+
+Fetches competitions, teams, players, and fixtures from football-data.org and loads them into Postgres.
+This takes 2–3 minutes on the free tier (rate-limited to 10 req/min).
+Re-run any time to pick up updated fixtures and results.
+
+### 6 — Start the servers
+
+In two separate terminals:
+
+```bash
+make api   # FastAPI on http://localhost:8000
+make web   # Next.js on http://localhost:3000
+```
+
+API docs are available at `http://localhost:8000/docs` once the server is running.
+
+### All make targets
+
+| Command | What it does |
+|---------|-------------|
+| `make setup` | Install all Python + Node dependencies |
+| `make db` | Start Postgres via Docker |
+| `make db-stop` | Stop the Postgres container |
+| `make db-logs` | Tail Postgres logs |
+| `make migrate` | Apply Alembic migrations |
+| `make sync` | Pull soccer data from football-data.org |
+| `make api` | Start FastAPI dev server on :8000 |
+| `make web` | Start Next.js dev server on :3000 |
+
+### Environment files
+
+| File | Purpose |
+|------|---------|
+| `apps/api/.env` | Backend config — pre-filled, just add your API key |
+| `apps/api/.env.example` | Template — committed to git, safe to share |
+| `apps/web/.env.local` | Frontend config — not needed for local dev (uses defaults) |
+
+The backend reads its config from `apps/api/.env`.
+The frontend defaults to `http://localhost:8000` for the API URL — no extra config needed locally.
 
 ---
 

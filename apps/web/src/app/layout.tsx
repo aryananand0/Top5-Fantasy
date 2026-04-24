@@ -37,7 +37,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${syne.variable} ${nunito.variable}`}>
-      <body className="font-sans">{children}</body>
+      <body className="font-sans" suppressHydrationWarning>{children}</body>
     </html>
   )
 }

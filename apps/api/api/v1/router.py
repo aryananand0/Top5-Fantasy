@@ -11,7 +11,7 @@ Plug in future routes by adding:
 
 from fastapi import APIRouter
 
-from api.v1.routes import auth, gameweeks, health, lineup, players, squad, transfer
+from api.v1.routes import auth, dashboard, fixtures, gameweeks, health, lineup, players, scoring, squad, transfer
 
 router = APIRouter()
 
@@ -36,10 +36,16 @@ router.include_router(lineup.router, prefix="/lineups", tags=["lineups"])
 # Transfer system (Step 13)
 router.include_router(transfer.router, prefix="/transfers", tags=["transfers"])
 
-# --- Future routes (plug in as each step is implemented) ---
+# Scoring read endpoints (Step 14)
+router.include_router(scoring.router, prefix="/gameweeks", tags=["scoring"])
 
-# from api.v1.routes import fixtures
-# router.include_router(fixtures.router, prefix="/fixtures", tags=["fixtures"])
+# Dashboard aggregation (Step 15)
+router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
+
+# Fixtures
+router.include_router(fixtures.router, prefix="/fixtures", tags=["fixtures"])
+
+# --- Future routes ---
 
 # from api.v1.routes import leagues
 # router.include_router(leagues.router, prefix="/leagues", tags=["leagues"])

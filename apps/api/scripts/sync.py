@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 CLI script for manually triggering data ingestion from football-data.org.
 
@@ -17,10 +17,6 @@ from pathlib import Path
 
 # Make apps/api/ importable regardless of working directory
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-import os  # noqa: E402
-
-os.environ.setdefault("DATABASE_URL", "")  # must be set in .env — sentinel keeps import happy
 
 from core.config import get_settings  # noqa: E402
 from db.session import get_db  # noqa: E402

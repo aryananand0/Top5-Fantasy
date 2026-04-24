@@ -16,18 +16,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # --- Enum types (must exist before columns that reference them) ---
-    position_enum = sa.Enum("GK", "DEF", "MID", "FWD", name="position_enum")
-    fixture_status_enum = sa.Enum(
-        "SCHEDULED", "LIVE", "FINISHED", "POSTPONED", "CANCELLED",
-        name="fixture_status_enum",
-    )
-    data_quality_enum = sa.Enum("full", "partial", "estimated", name="data_quality_enum")
-
-    position_enum.create(op.get_bind())
-    fixture_status_enum.create(op.get_bind())
-    data_quality_enum.create(op.get_bind())
-
     # --- seasons ---
     op.create_table(
         "seasons",
@@ -72,12 +60,13 @@ def upgrade() -> None:
     )
 
     # --- players ---
+    # position_enum is created here on first use (no create_type=False).
     op.create_table(
         "players",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("name", sa.String(150), nullable=False),
         sa.Column("display_name", sa.String(100), nullable=True),
-        sa.Column("position", sa.Enum("GK", "DEF", "MID", "FWD", name="position_enum", create_type=False), nullable=False),
+        sa.Column("position", sa.Enum("GK", "DEF", "MID", "FWD", name="position_enum"), nullable=False),
         sa.Column("team_id", sa.Integer(), sa.ForeignKey("teams.id"), nullable=False),
         sa.Column("season_id", sa.Integer(), sa.ForeignKey("seasons.id"), nullable=False),
         sa.Column("external_id", sa.Integer(), nullable=True),
@@ -105,18 +94,21 @@ def upgrade() -> None:
     op.create_index("ix_players_current_price", "players", ["current_price"])
 
     # --- fixtures ---
+    # fixture_status_enum and data_quality_enum are created here on first use.
+    # gameweek_id is an integer column only — the FK to gameweeks is added in
+    # migration 0003 after the gameweeks table is created.
     op.create_table(
         "fixtures",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("competition_id", sa.Integer(), sa.ForeignKey("competitions.id"), nullable=False),
-        sa.Column("gameweek_id", sa.Integer(), sa.ForeignKey("gameweeks.id"), nullable=True),
+        sa.Column("gameweek_id", sa.Integer(), nullable=True),
         sa.Column("home_team_id", sa.Integer(), sa.ForeignKey("teams.id"), nullable=False),
         sa.Column("away_team_id", sa.Integer(), sa.ForeignKey("teams.id"), nullable=False),
         sa.Column("kickoff_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "status",
             sa.Enum("SCHEDULED", "LIVE", "FINISHED", "POSTPONED", "CANCELLED",
-                    name="fixture_status_enum", create_type=False),
+                    name="fixture_status_enum"),
             nullable=False,
             server_default=sa.text("'SCHEDULED'"),
         ),
@@ -125,7 +117,7 @@ def upgrade() -> None:
         sa.Column("external_id", sa.Integer(), nullable=True),
         sa.Column(
             "data_quality_status",
-            sa.Enum("full", "partial", "estimated", name="data_quality_enum", create_type=False),
+            sa.Enum("full", "partial", "estimated", name="data_quality_enum"),
             nullable=False,
             server_default=sa.text("'full'"),
         ),
@@ -139,6 +131,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("ix_fixtures_status", table_name="fixtures")
+    op.drop_index("ix_fixtures_kickoff", table_name="fixtures")
+    op.drop_index("ix_fixtures_gameweek", table_name="fixtures")
     op.drop_table("fixtures")
     op.drop_index("ix_players_current_price", table_name="players")
     op.drop_index("ix_players_position", table_name="players")
@@ -148,6 +143,6 @@ def downgrade() -> None:
     op.drop_table("competitions")
     op.drop_table("seasons")
 
-    sa.Enum(name="data_quality_enum").drop(op.get_bind())
-    sa.Enum(name="fixture_status_enum").drop(op.get_bind())
-    sa.Enum(name="position_enum").drop(op.get_bind())
+    op.execute("DROP TYPE IF EXISTS data_quality_enum")
+    op.execute("DROP TYPE IF EXISTS fixture_status_enum")
+    op.execute("DROP TYPE IF EXISTS position_enum")

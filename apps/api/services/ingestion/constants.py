@@ -16,18 +16,45 @@ SUPPORTED_COMPETITIONS: list[dict] = [
     {"code": "FL1", "name": "Ligue 1",            "country": "France"},
 ]
 
-# Maps football-data.org position strings → our Position enum
-# Unmapped strings (e.g. "Goalkeeper" as a fallback) default to MID per design.
+# Maps football-data.org position strings → our Position enum.
+# The API returns granular sub-positions (e.g. "Centre-Back", "Left Winger")
+# rather than the four broad values, so we map every known variant.
+# Unknown strings fall back to MID in normalize_position().
 POSITION_MAP: dict[str, Position] = {
+    # Goalkeepers
     "Goalkeeper": Position.GK,
+    "GK": Position.GK,
+
+    # Defenders — all back-line sub-positions
     "Defender": Position.DEF,
+    "Centre-Back": Position.DEF,
+    "Left-Back": Position.DEF,
+    "Right-Back": Position.DEF,
+    "Left Back": Position.DEF,
+    "Right Back": Position.DEF,
+    "Wing-Back": Position.DEF,
+    "Sweeper": Position.DEF,
+    "Defence": Position.DEF,
+    "DEF": Position.DEF,
+
+    # Midfielders — all central and wide mid sub-positions
     "Midfielder": Position.MID,
+    "Central Midfield": Position.MID,
+    "Defensive Midfield": Position.MID,
+    "Attacking Midfield": Position.MID,
+    "Left Midfield": Position.MID,
+    "Right Midfield": Position.MID,
+    "Midfield": Position.MID,
+    "MID": Position.MID,
+
+    # Forwards — all attacking sub-positions
     "Forward": Position.FWD,
     "Attacker": Position.FWD,
-    # Compact forms sometimes returned
-    "GK": Position.GK,
-    "DEF": Position.DEF,
-    "MID": Position.MID,
+    "Centre-Forward": Position.FWD,
+    "Left Winger": Position.FWD,
+    "Right Winger": Position.FWD,
+    "Second Striker": Position.FWD,
+    "Offence": Position.FWD,
     "FWD": Position.FWD,
 }
 
